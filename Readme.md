@@ -66,5 +66,5 @@ Firware for ESP32s module with AC power-in sensor.  Module count  incoming pulse
 
 Общая принципиальная схема модуля представлена ниже.
 
-![Schematic of ESP32-MQTT_2xCounter rev1](https://github.com/DrCosha/ESP32-MQTT_2xCounter/images/Common_circuit_v1.png)
+![Schematic of ESP32-MQTT_2xCounter rev1](https://github.com/DrCosha/ESP32-MQTT_2xCounter/blob/main/images/Common_circuit_v1.png)
 
