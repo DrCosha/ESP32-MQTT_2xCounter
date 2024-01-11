@@ -179,7 +179,7 @@ struct GlobalParams {
   char            wifi_pwd[40];                   // пароль к WiFi сети
   char            mqtt_usr[40];                   // имя пользователя MQTT сервера
   char            mqtt_pwd[40];                   // пароль к MQTT серверу
-  char            mqtt_host_s[80];                  // адрес сервера MQTT
+  char            mqtt_host_s[80];                // адрес сервера MQTT
   uint16_t        mqtt_port;                      // порт подключения к MQTT серверу
 // параметры очередей MQTT
   char            command_topic[80];              // топик получения команд
@@ -435,11 +435,13 @@ void handleRebootPage() { // процедура обработки страни�
   cmdReset();
 } 
 
+*/
+
 void handleNotFoundPage() { // процедура генерации страницы сервера c 404-й ошибкой
   String out_http_text = CSW_PAGE_TITLE;
   out_http_text += ControllerName +" - Page not found</title>" + CSW_PAGE_STYLE;
   out_http_text += R"=====(</head><body><div style='text-align:left;display:inline-block;color:#eaeaea;min-width:340px;'>
- <div style="text-align:center;color:#eaeaea;"><h3>Amplifier control module configuration</h3><h2>)=====";
+ <div style="text-align:center;color:#eaeaea;"><h3>Counters module configuration</h3><h2>)=====";
   out_http_text += ControllerName + R"=====(</h2><div><a id="blink" style="font-size:2em" > 404! Page not found...</a>
  </div><br><div></div><p><form action='/' method='get'><button>Return</button>)=====" + CSW_PAGE_FOOTER;
    #ifdef DEBUG_LEVEL_PORT       // вывод в порт при отладке кода 
@@ -451,7 +453,6 @@ void handleNotFoundPage() { // процедура генерации стран�
 void handleApplayPage() { // обработка страницы с приемом данных в контроллер со страницы клиента
   String ArgName  = "";
   String ArgValue = "";
-  IPAddress _IP = P_MQTT_HOST;
   uint16_t _Int = 0;
   if (WEB_Server.args() > 0) {                                                  // если параметры переданы - то занимаемся их обработкой  
     for (size_t i = 0; i < WEB_Server.args(); i++) {                            // идем по списку переданных на страницу значений и обрабатываем их 
@@ -472,23 +473,13 @@ void handleApplayPage() { // обработка страницы с приемо
         Serial.printf("Argument [%s] >> curConfig.wifi_pwd = [%s]\n",ArgName, curConfig.wifi_pwd);
         #endif  
       }
-      // Аргумент [mh] >> IP для доступа к MQTT серверу
-      if (ArgName.equals("mh") and !ArgValue.isEmpty()) {                       // далее следует проверка на валидность адреса 
-        if (_IP.fromString(ArgValue)) {                                         // если значение конвертится, то присваиваем новое значение 
-          curConfig.mqtt_host[0] = _IP[0];                                      // сохраняем адрес в конфигурацию
-          curConfig.mqtt_host[1] = _IP[1];
-          curConfig.mqtt_host[2] = _IP[2];
-          curConfig.mqtt_host[3] = _IP[3];   
-          #ifdef DEBUG_LEVEL_PORT       // вывод в порт при отладке кода 
-          Serial.printf("Argument [%s] >> curConfig.mqtt_host = [%u.%u.%u.%u]\n",ArgName,curConfig.mqtt_host[0],curConfig.mqtt_host[1],curConfig.mqtt_host[2],curConfig.mqtt_host[3]);           
-          #endif  
-          }
-        else {
-          #ifdef DEBUG_LEVEL_PORT       // вывод в порт при отладке кода 
-          Serial.printf("Error in argument [%s]. Value [%s] non convertable to IP.\n",ArgName,ArgValue);  
-          #endif  
-        } 
-      }  
+      // Аргумент [mh] >> хост для доступа к MQTT серверу
+      if (ArgName.equals("mh") and !ArgValue.isEmpty()) {                       // валидно не пустое значение
+        strcpy(curConfig.mqtt_host_s, ArgValue.c_str());                        // присваиваем имя MQTT хоста
+        #ifdef DEBUG_LEVEL_PORT       // вывод в порт при отладке кода 
+        Serial.printf("Argument [%s] >> curConfig.mqtt_host_s = [%s]\n",ArgName, curConfig.mqtt_host_s);
+        #endif  
+      }
       // Аргумент [ms] >> порт для доступа к MQTT
       if (ArgName.equals("ms") and !ArgValue.isEmpty()) {                       // проверяем на то, что в поле есть актуальное значение от 1..0xFFFF
         _Int = ArgValue.toInt();
@@ -529,14 +520,6 @@ void handleApplayPage() { // обработка страницы с приемо
         Serial.printf("Argument [%s] >> curConfig.report_topic = [%s]\n",ArgName, curConfig.report_topic);
         #endif  
       }
-      // Аргумент [tm] >> MQTT топик для отчета о вспомогательных параметрах
-      if (ArgName.equals("tm") and !ArgValue.isEmpty()) {                       // проверяем на то, что в поле есть актуальное значение     
-        if (ArgValue.endsWith("/")) ArgValue.remove(ArgValue.length()-1,1);     // если есть обратная косая черта - удаляем
-        strcpy(curConfig.misc_topic, ArgValue.c_str());                         // присваиваем значение переменной 
-        #ifdef DEBUG_LEVEL_PORT       // вывод в порт при отладке кода 
-        Serial.printf("Argument [%s] >> curConfig.misc_topic = [%s]\n",ArgName, curConfig.misc_topic);
-        #endif  
-      }
       // Аргумент [tl] >> MQTT топик для LWT
       if (ArgName.equals("tl") and !ArgValue.isEmpty()) {                       // проверяем на то, что в поле есть актуальное значение     
         if (ArgValue.endsWith("/")) ArgValue.remove(ArgValue.length()-1,1);     // если есть обратная косая черта - удаляем
@@ -552,7 +535,7 @@ void handleApplayPage() { // обработка страницы с приемо
   #ifdef DEBUG_LEVEL_PORT                                       // вывод в порт при отладке кода 
   Serial.println("WEB <<< Get and applay changes...");    
   #endif  
-  handleRebootPage();                                           // отражаем страницу перезагрузки и перегружаем устройство
+//  handleRebootPage();                                           // отражаем страницу перезагрузки и перегружаем устройство
 }
 
 void handleCheckAlivePage() { // процедура проверки статуса контроллера и возврат данных на страницу ожидания (reboot и applay)
@@ -561,8 +544,6 @@ void handleCheckAlivePage() { // процедура проверки стату�
   #endif
   WEB_Server.send(200, "text/plane", "alive");
 }
-
-*/
 
 // -------------------------- описание call-back функции MQTT клиента ------------------------------------
 
@@ -646,13 +627,12 @@ void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties 
 
 void webServerTask(void *pvParam) { // задача по обслуживанию WEB сервера модуля
 // присваиваем ресурсы (страницы) нашему WEB серверу - страницы объявлены заранее и являются статическими
-/*
-  WEB_Server.on("/", handleRootPage);		                              // корневая страница с конфигурацией
+//  WEB_Server.on("/", handleRootPage);		                              // корневая страница с конфигурацией
   WEB_Server.on("/applay",handleApplayPage);                          // страница, применения изменений - на котрую передаются данные для новой конфигурации
-  WEB_Server.on("/reboot",handleRebootPage);                          // страница автоматической перезагрузки контроллера 
+//  WEB_Server.on("/reboot",handleRebootPage);                          // страница автоматической перезагрузки контроллера 
   WEB_Server.on("/alive",handleCheckAlivePage);                       // страница для проверки стстуса контроллера и перенаправления на основную страницу
   WEB_Server.onNotFound(handleNotFoundPage);		                      // страница с 404-й ошибкой   
-*/  
+
   bool _FirstTime = true;
   while (true) {
     if (f_WEB_Server_Enable) {  // если разрешена работа WEB сервера
