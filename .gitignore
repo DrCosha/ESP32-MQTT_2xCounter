@@ -4,4 +4,4 @@
 .vscode/launch.json
 .vscode/ipch
 lib
-src/local.h
+src/local_secrets.h
