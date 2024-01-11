@@ -26,7 +26,7 @@
 получен динамически от вашего маршрутизатора. Поддерживается только сеть 2.4МГц (это ограничение самого ESP32). Отдельным пунктом меню можно обнулить оба счётчика по отдельности. 
 Встроенный WEB сервер можно так же использовать для получения значения счётчиков в текущий момент времени. 
 
-Для этого нужно обратится по адресу [адрес_модуля]/get_data?cnt=х - где х - номер счётчика, значение которого мы хотим получить.
+Для этого нужно обратится по адресу [адрес_модуля]/get_data?cntr=х - где х - номер счётчика, значение которого мы хотим получить 0..2 (0 - счётчик перезагрузок).
 
 Доступ к модулю через MQTT возможен при правильной настройке параметров подключения.  При этом это может быть как локальный, так и глобальный MQTT сервер. 
 Работа с сервером идет через три топика:
@@ -132,6 +132,7 @@ extern "C" {
 // --- имена команд ---
 #define jc_REPORT         "report"                // команда принудительного формирования отчета в топик
 #define jc_REBOOT         "reboot"                // команда принудительной удаленной перезагрузки
+#define jc_RESET          "reset"                 // команда принудительной удаленной перезагрузки
 
 // --- имена ключей ---
 #define jk_CLEAR          "clear"                 // ключ описания команды очистки (счётчиков или конфигурации)
@@ -272,7 +273,7 @@ void SetConfigByDefault() { // устанавливаем значения в б
       memset((void*)&curConfig,0,sizeof(curConfig));    // обнуляем область памяти и заполняем ее значениями по умолчанию
       curConfig.counter_01 = 0;                                                       // счётчик 1 = 0
       curConfig.counter_02 = 0;                                                       // счётчик 2 = 0
-      curConfig.counter_reboot = 1;                                                   // счётчик перезагрузок = 1
+      curConfig.counter_reboot = 0;                                                   // счётчик перезагрузок = 0
       memcpy(curConfig.wifi_ssid,P_WIFI_SSID,sizeof(P_WIFI_SSID));                    // сохраняем имя WiFi сети по умолчанию      
       memcpy(curConfig.wifi_pwd,P_WIFI_PASSWORD,sizeof(P_WIFI_PASSWORD));             // сохраняем пароль к WiFi сети по умолчанию
       memcpy(curConfig.mqtt_usr,P_MQTT_USER,sizeof(P_MQTT_USER));                     // сохраняем имя пользователя MQTT сервера по умолчанию
@@ -324,7 +325,12 @@ void CheckAndUpdateEEPROM() { // проверяем конфигурацию и 
 // ------------------------ команды, которые обрабатываются в рамках получения событий ---------------------
 
 void cmdReset() { // команда сброса конфигурации до состояния по умолчанию и перезагрузка
+  #ifdef DEBUG_LEVEL_PORT       // вывод в порт при отладке кода 
+  Serial.println("!!! Start rebooting process !!!");
+  #endif    
+  CheckAndUpdateEEPROM();                                                                    // проверяем конфигурацию и в случае необходимости - записываем новую
   if (mqttClient.connected()) mqttClient.publish(curConfig.lwt_topic, 0, true, jv_OFFLINE);  // публикуем в топик LWT_TOPIC событие об отключении
+  vTaskDelay(pdMS_TO_TICKS(500));                                                            // задержка для публикации  
   ESP.restart();                                                                             // перезагружаемся  
 }
 
@@ -356,10 +362,8 @@ void cmdSetCounterValue(const Counters_t Cntr, uint32_t CntrValue) { // функ
   f_Has_Report = true; 
 }
 
-
 // ------------------------- обработка событий по генерации страниц WEB сервера -------------------------------
 
-/*
 void handleRootPage() { // процедура генерации основной страницы сервера
   String tmpStr; 
   String out_http_text = CSW_PAGE_TITLE;
@@ -368,7 +372,7 @@ void handleRootPage() { // процедура генерации основно�
  function sp(i){eb(i).type=(eb(i).type==='text'?'password':'text');}function wl(f){window.addEventListener('load',f);}function jd(){var t=0,i=document.querySelectorAll('input,button,textarea,select'); 
  while(i.length>=t){ if(i[t]){i[t]['name']=(i[t].hasAttribute('id')&&(!i[t].hasAttribute('name')))?i[t]['id']:i[t]['name'];}t++;}} wl(jd); </script>)=====" + CSW_PAGE_STYLE +
  R"=====( </head><body> <div style="text-align:left;display:inline-block;color:#eaeaff;min-width:340px;"> <div style="text-align:center;color:#eaeaea;"> <noscript>To use this page, please enable JavaScript<br></noscript>
- <h3>Amplifier control module configuration</h3><h2>)=====";
+ <h3>Impulse counters module configuration</h3><h2>)=====";
   out_http_text += ControllerName +
  R"=====(</h2></div><fieldset><legend><b>&nbsp;Network parameters&nbsp;</b></legend>
  <form method="get" action="applay"><p><b>WiFi SSID</b> [)=====";
@@ -378,7 +382,7 @@ void handleRootPage() { // процедура генерации основно�
   out_http_text += tmpStr +
  R"=====(" name="wn"></p><p><b>WiFi password</b><input type="checkbox" onclick="sp(&quot;wp&quot;)" name=""><br>
  <input id="wp" type="password" placeholder="Password" value="****" name="wp"></p><p><b>IP for MQTT host</b> [)=====";
-  tmpStr = IPAddress(curConfig.mqtt_host[0],curConfig.mqtt_host[1],curConfig.mqtt_host[2],curConfig.mqtt_host[3]).toString();
+  tmpStr = String(curConfig.mqtt_host_s);
   out_http_text += tmpStr + R"=====(]<br><input id="mh" placeholder=" " value=")=====";
   out_http_text += tmpStr + R"=====(" name="mh"></p><p><b>Port</b> [)=====";
   tmpStr = String(curConfig.mqtt_port);
@@ -396,11 +400,7 @@ void handleRootPage() { // процедура генерации основно�
   tmpStr = String(curConfig.report_topic);
   out_http_text += tmpStr + R"=====(]<br><input id="tr" placeholder=")=====";
   out_http_text += tmpStr + R"=====(" value=")=====";
-  out_http_text += tmpStr + R"=====(" name="tr"></p><p><b>Misc topic</b> [)=====";
-  tmpStr = String(curConfig.misc_topic);
-  out_http_text += tmpStr + R"=====(]<br><input id="tm" placeholder=")=====";
-  out_http_text += tmpStr + R"=====(" value=")=====";
-  out_http_text += tmpStr + R"=====(" name="tm"></p><p><b>LWT topic</b> [)=====";
+  out_http_text += tmpStr + R"=====(" name="tr"></p><p><b>LWT topic</b> [)=====";
   tmpStr = String(curConfig.lwt_topic);
   out_http_text += tmpStr + R"=====(]<br><input id="tl" placeholder=")=====";
   out_http_text += tmpStr + R"=====(" value=")=====";
@@ -412,7 +412,6 @@ void handleRootPage() { // процедура генерации основно�
   #endif  
   WEB_Server.send ( 200, "text/html", out_http_text );
   f_Has_WEB_Server_Connect = true;                                            // взводим флаг наличия изменений
-
 }
 
 void handleRebootPage() { // процедура обработки страницы c ожидания
@@ -434,8 +433,6 @@ void handleRebootPage() { // процедура обработки страни�
   vTaskDelay(pdMS_TO_TICKS(500));                                   // делаем задержку перед перезагрузкой чтобы сервер успел отправить страницы
   cmdReset();
 } 
-
-*/
 
 void handleNotFoundPage() { // процедура генерации страницы сервера c 404-й ошибкой
   String out_http_text = CSW_PAGE_TITLE;
@@ -535,7 +532,7 @@ void handleApplayPage() { // обработка страницы с приемо
   #ifdef DEBUG_LEVEL_PORT                                       // вывод в порт при отладке кода 
   Serial.println("WEB <<< Get and applay changes...");    
   #endif  
-//  handleRebootPage();                                           // отражаем страницу перезагрузки и перегружаем устройство
+  handleRebootPage();                                           // отражаем страницу перезагрузки и перегружаем устройство
 }
 
 void handleCheckAlivePage() { // процедура проверки статуса контроллера и возврат данных на страницу ожидания (reboot и applay)
@@ -544,6 +541,34 @@ void handleCheckAlivePage() { // процедура проверки стату�
   #endif
   WEB_Server.send(200, "text/plane", "alive");
 }
+
+void handleGetDataPage() { // получения данных по номеру переданного счётчика
+  // передать данные о счётчике номер которого указан в строке запроса
+  String ArgName  = "";
+  String ArgValue = "";
+  String CntrResult = String(curConfig.counter_reboot);
+  uint8_t _Int = 0;
+  if (WEB_Server.args() > 0) {                                                // если параметры переданы - то занимаемся их обработкой  
+    ArgName = WEB_Server.argName(0);                                          // имя первого параметра        
+    ArgValue = WEB_Server.arg(0);                                             // значение первого параметра  
+    if (ArgName.equals("cntr") and !ArgValue.isEmpty()) {                     // проверяем на то, что в поле есть актуальное значение
+      _Int = ArgValue.toInt();
+      switch (_Int) {
+        case 1:
+          CntrResult = String(curConfig.counter_01);
+          break;        
+        case 2:
+          CntrResult = String(curConfig.counter_02);        
+          break;        
+      } 
+    }  
+  }
+  #ifdef DEBUG_LEVEL_PORT       // вывод в порт при отладке кода 
+  Serial.printf("WEB >>> Get by name [%s=%s] value = [%s]\n",ArgName,ArgValue,CntrResult);
+  #endif
+  WEB_Server.send(200, "text/plane", CntrResult);
+}
+   
 
 // -------------------------- описание call-back функции MQTT клиента ------------------------------------
 
@@ -599,23 +624,31 @@ void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties 
   if (strcmp(topic, curConfig.command_topic) == 0) {
     // разбираем MQTT сообщение и подготавливаем буфер с изменениями для формирования команд    
     // для этого получаем семафор обработки входного JSON документа
-    while ( xSemaphoreTake(sem_InputJSONdoc,(TickType_t) 10) != pdTRUE ) {
-      vTaskDelay(1/portTICK_PERIOD_MS);         
-    }
+    while ( xSemaphoreTake(sem_InputJSONdoc,(TickType_t) 10) != pdTRUE ) vTaskDelay(1/portTICK_PERIOD_MS);         
     DeserializationError err = deserializeJson(InputJSONdoc, messageTemp);                    // десерилизуем сообщение и взводим признак готовности к обработке
     if (err) {
       #ifdef DEBUG_LEVEL_PORT         
       Serial.print(F("Error of deserializeJson(): "));
       Serial.println(err.c_str());
       #endif
+      f_HasMQTTCommand = false;                                                              // сбрасываем флаг получения команды по MQTT
+      // далее проверяем, если это короткие сообщения - то сами достраиваем объект документ
+      if (strstr(payload,jc_REPORT) != NULL ) {
+        InputJSONdoc[jc_REPORT] = true;
+        f_HasMQTTCommand = true;                                                              
+      }  
+      if (strstr(payload,jc_REBOOT) != NULL ) {
+        InputJSONdoc[jc_REBOOT] = true;
+        f_HasMQTTCommand = true;                                                              
+      }  
+      if (strstr(payload,jc_RESET) != NULL ) {
+        InputJSONdoc[jc_REBOOT] = true;
+        f_HasMQTTCommand = true;                                                              
+      }  
+      if (!f_HasMQTTCommand) xSemaphoreGive ( sem_InputJSONdoc );                            // отдаем семафор, если MQTT обработки не будет
       }
-    else {  
-      // для коротких сообщений без ключей дополняем DOC объект
-      if (strstr(payload,jc_REPORT) != NULL ) InputJSONdoc[jc_REPORT] = true;
-      if (strstr(payload,jc_REBOOT) != NULL ) InputJSONdoc[jc_REBOOT] = true;      
-      f_HasMQTTCommand = true;                            // взводим флаг получения команды по MQTT
-      // отдадим семафор обработки документа только после преобразования JSON документа в команды
-    }
+    else f_HasMQTTCommand = true;                                                            // взводим флаг получения команды по MQTT
+    // отдадим семафор обработки документа только после преобразования JSON документа в команды
   }
   #ifdef DEBUG_LEVEL_PORT         
   Serial.printf("Publish received.\n  topic: %s\n  message: [", topic);
@@ -627,10 +660,11 @@ void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties 
 
 void webServerTask(void *pvParam) { // задача по обслуживанию WEB сервера модуля
 // присваиваем ресурсы (страницы) нашему WEB серверу - страницы объявлены заранее и являются статическими
-//  WEB_Server.on("/", handleRootPage);		                              // корневая страница с конфигурацией
+  WEB_Server.on("/", handleRootPage);		                              // корневая страница с конфигурацией
   WEB_Server.on("/applay",handleApplayPage);                          // страница, применения изменений - на котрую передаются данные для новой конфигурации
-//  WEB_Server.on("/reboot",handleRebootPage);                          // страница автоматической перезагрузки контроллера 
+  WEB_Server.on("/reboot",handleRebootPage);                          // страница автоматической перезагрузки контроллера 
   WEB_Server.on("/alive",handleCheckAlivePage);                       // страница для проверки стстуса контроллера и перенаправления на основную страницу
+  WEB_Server.on("/get_data",handleGetDataPage);                       // передать данные о счётчике номер которого указан в строке запроса
   WEB_Server.onNotFound(handleNotFoundPage);		                      // страница с 404-й ошибкой   
 
   bool _FirstTime = true;
@@ -652,9 +686,9 @@ void webServerTask(void *pvParam) { // задача по обслуживани�
 }
 
 void wifiTask(void *pvParam) { // задача установления и поддержания WiFi соединения
-  uint32_t  StartWiFiCycle = 0;                                       // стартовый момент цикла в обработчике WiFi
-  uint32_t  StartMQTTCycle = 0;                                       // стартовый момент цикла подключения к MQTT
-  uint8_t   APClientCount   = 0;                                      // количество подключенных клиентов в режиме AP
+  uint32_t  StartWiFiCycle = 0;                                     // стартовый момент цикла в обработчике WiFi
+  uint32_t  StartMQTTCycle = 0;                                     // стартовый момент цикла подключения к MQTT
+  uint8_t   APClientCount   = 0;                                    // количество подключенных клиентов в режиме AP
   WiFi.hostname(ControllerName);
   s_CurrentWIFIMode = WF_UNKNOWN;
   while (true) {    
@@ -833,10 +867,10 @@ void eventHandlerTask (void *pvParam) { // задача обработки со�
       }
       // MQTT: сброс конфигурации/значения счётчиков
       if (InputJSONdoc.containsKey(jk_CLEAR))  {   // послана команда сброса
-        if (InputJSONdoc[jk_CLEAR] == jv_COUNTER_01)   cmdSetCounterValue(CN_CNT01,0);      // команда сброса счётчика 1
-        if (InputJSONdoc[jk_CLEAR] == jv_COUNTER_02)   cmdSetCounterValue(CN_CNT02,0);      // команда сброса счётчика 2
-        if (InputJSONdoc[jk_CLEAR] == jv_COUNTER_RB)   cmdSetCounterValue(CN_REBOOT,0);     // команда сброса счётчика перезагрузок
-        if (InputJSONdoc[jk_CLEAR] == jv_CONFIG)  cmdClearConfig_Reset();                   // команда сброса конфигурации и обнуления счётчиков
+        if (InputJSONdoc[jk_CLEAR] == jv_COUNTER_01) cmdSetCounterValue(CN_CNT01,0);          // команда сброса счётчика 1
+        if (InputJSONdoc[jk_CLEAR] == jv_COUNTER_02) cmdSetCounterValue(CN_CNT02,0);          // команда сброса счётчика 2
+        if (InputJSONdoc[jk_CLEAR] == jv_COUNTER_RB) cmdSetCounterValue(CN_REBOOT,0);         // команда сброса счётчика перезагрузок
+        if (InputJSONdoc[jk_CLEAR] == jv_CONFIG)     cmdClearConfig_Reset();                  // команда сброса конфигурации и обнуления счётчиков
       }
       // MQTT: установка значений счётчиков - 1
       if (InputJSONdoc.containsKey(jk_SET_VALUE_01))  {   // послана команда установки значения счётчика
@@ -864,6 +898,9 @@ void eventHandlerTask (void *pvParam) { // задача обработки со�
           #endif
         }
       }
+      // обработка входного JSON закончена - отпускаем семафор
+      f_HasMQTTCommand = false;                                       // сбрасываем флаг наличия изменений через MQTT 
+      xSemaphoreGive(sem_InputJSONdoc);                               // отпускаем семафор обработки входного сообщения
     }
     //--------------------- опрос кнопок - получение команд ------------------------
     bttn_clear.tick();                                                // опрашиваем кнопку CLEAR
@@ -890,8 +927,8 @@ void applayChangesTask (void *pvParam) { // применяем изменени�
   while (true) {
 
   // TODO: включаем/выключаем индикацию
-    digitalWrite(LED_RED_PIN,digitalRead(PIN_INP_CH1));
-    digitalWrite(LED_BLUE_PIN,digitalRead(PIN_INP_CH2));
+    digitalWrite(LED_RED_PIN,!digitalRead(PIN_INP_CH1));
+    digitalWrite(LED_BLUE_PIN,!digitalRead(PIN_INP_CH2));
 
 
     vTaskDelay(1/portTICK_PERIOD_MS); 
@@ -1003,7 +1040,7 @@ void setup() { // инициализация контроллера и прог�
   #ifdef DEBUG_LEVEL_PORT    
   if (s_EnableEEPROM) {  // если инициализация успешна - то:   
     if (ReadEEPROMConfig()) { // читаем конфигурацию из EEPROM и проверяем контрольную сумму для блока данных
-      // контрольная сумма блока данных верна - используем его в качестве конфигурации
+      // контрольная сумма блока данных верна - используем его в качестве конфигурации      
       Serial.println("EEPROM config is valid. Applay config.");
       }
     else { // контрольная сумма данных не сошлась - считаем блок испорченным, инициализируем и перезаписываем его
@@ -1028,9 +1065,6 @@ void setup() { // инициализация контроллера и прог�
     Serial.printf("  Counter #1: %u\n", curConfig.counter_01);
     Serial.printf("  Counter #2: %u\n", curConfig.counter_02);
     Serial.printf("  Reboot counter: %u\n", curConfig.counter_reboot);
-    Serial.println("---");    
-    Serial.printf("  CRC by read: %04X\n",curConfig.simple_crc16);
-    Serial.printf("  CRC by calc: %04X\n",GetCrc16Simple((uint8_t*)&curConfig, sizeof(curConfig)-4));  
     Serial.printf("---\n\n");
     }
   else { Serial.println("Warning! Блок работает без сохранения конфигурации !!!"); 
@@ -1046,6 +1080,9 @@ void setup() { // инициализация контроллера и прог�
   }  
   #endif  
 
+  // увеличиваем счетчик перезагрузок 
+  curConfig.counter_reboot++;
+
   // настраиваем MQTT клиента
   mqttClient.setCredentials(curConfig.mqtt_usr,curConfig.mqtt_pwd);
   mqttClient.setServer(curConfig.mqtt_host_s, curConfig.mqtt_port);
@@ -1057,7 +1094,7 @@ void setup() { // инициализация контроллера и прог�
   mqttClient.onPublish(onMqttPublish);
 
   // настраиваем семафоры - сбрасываем их
-  xSemaphoreGive( sem_InputJSONdoc );
+  xSemaphoreGive(sem_InputJSONdoc);
   
   // создаем отдельные параллельные задачи, выполняющие группы функций  
   // стартуем основные задачи
