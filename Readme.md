@@ -38,6 +38,7 @@ Firware for ESP32s module with AC power-in sensor.  Module count  incoming pulse
 
 ```
 {"report"} 			- команда немедленной генерации отчёта в топик [STATUS]
+{"reboot"} 			- команда перезагрузки модуля с сохранением текущих счётчиков
 {"clear":"config"} 		- сброс текущей конфигурации до начальной и перезагрузки
 {"clear":"cnt#1"} 		- сброс счётчика №1
 {"clear":"cnt#2"} 		- сброс счётчика №2
