@@ -24,9 +24,13 @@
 где хххх - последние цифры MAC адреса ESP32s. После поднятия точки доступа, можно соединится со страницей настроек модуля,
 которая будет доступна по адресу default gateway точки доступа. Эти же настройки доступны и при успешном подключении модуля к WiFi сети. Адрес при этом будет 
 получен динамически от вашего маршрутизатора. Поддерживается только сеть 2.4МГц (это ограничение самого ESP32). Отдельным пунктом меню можно обнулить оба счётчика по отдельности. 
-Встроенный WEB сервер можно так же использовать для получения значения счётчиков в текущий момент времени. 
 
-Для этого нужно обратится по адресу [адрес_модуля]/get_data?cntr=х - где х - номер счётчика, значение которого мы хотим получить 0..2 (0 - счётчик перезагрузок).
+Встроенный WEB сервер можно так же использовать для получения значения счётчиков в текущий момент времени, или их установки. 
+Для этого нужно:
+
+- для получения данных обратится по адресу [адрес_модуля]/get_data?cntr=х - где х - номер счётчика, значение которого мы хотим получить 0..2 (0 - счётчик перезагрузок).
+- для задания значений счётчиков обратится по адресу [адрес_модуля]/set_data?cntr=х&value=nnn - где х - номер счётчика, значение которого мы хотим установить 0..2 (0 - счётчик перезагрузок), 
+  а nnn - новое значение этого счётчика;
 
 Доступ к модулю через MQTT возможен при правильной настройке параметров подключения.  При этом это может быть как локальный, так и глобальный MQTT сервер. 
 Работа с сервером идет через три топика:
@@ -322,6 +326,28 @@ void CheckAndUpdateEEPROM() { // проверяем конфигурацию и 
 #endif      
 }
 
+bool isNumeric(String str, bool isInt) { // проверка, что строка содержит числo
+// проверяем, что в строке содержится число и флаг, должно ли оно быть целым
+    unsigned int stringLength = str.length(); 
+    if (stringLength == 0) {
+        return false;
+    } 
+    for(unsigned int i = 0; i < stringLength; ++i) {
+        if (isDigit(str.charAt(i))) {
+            continue;
+        }
+        if (str.charAt(i) == '.') {
+            if (isInt) {
+                return false;
+            }
+            isInt = true;
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+
 // ------------------------ команды, которые обрабатываются в рамках получения событий ---------------------
 
 void cmdReset() { // команда сброса конфигурации до состояния по умолчанию и перезагрузка
@@ -367,12 +393,39 @@ void cmdSetCounterValue(const Counters_t Cntr, uint32_t CntrValue) { // функ
 void handleRootPage() { // процедура генерации основной страницы сервера
   String tmpStr; 
   String out_http_text = CSW_PAGE_TITLE;
+  out_http_text += ControllerName + " values</title>" + CSW_PAGE_STYLE + R"=====(<script> function wl(f){window.addEventListener('load',f);}function gv(count_num) {var xhttp = new XMLHttpRequest();	xhttp.onreadystatechange = function() {
+ if (this.readyState == 4 && this.status == 200){	document.getElementById("in"+count_num).value = this.responseText;}};	xhttp.open("GET", "get_data?cntr="+count_num, true); xhttp.send();}			
+ function sv(count_num) {var xhttp = new XMLHttpRequest(); xhttp.onreadystatechange = function() { if (this.readyState == 4 && this.status == 200) { if (this.responseText.length == 0) {	alert ("Wrong value for counter!"); window.location='/'; }
+ else { if (this.responseText.startsWith("Error")) { alert (this.responseText); window.location='/'; } else document.getElementById("in"+count_num).value = this.responseText;}}}; 
+ xhttp.open("GET", "set_data?cntr="+count_num+"&value="+document.getElementById("in"+count_num).value, true);	xhttp.send();} function jd(){ var t=0, i=document.querySelectorAll('input,button,textarea,select');	while(i.length>=t){ 
+ if(i[t]){ i[t]['name']=(i[t].hasAttribute('id')&&(!i[t].hasAttribute('name')))?i[t]['id']:i[t]['name'];} t++;}} wl(jd);</script></head>
+ <body><div style="text-align:left;display:inline-block;color:#eaeaff;min-width:340px;"><div style="text-align:center;color:#eaeaea;"><noscript>To use this page, please enable JavaScript<br></noscript><h3>Signal counting module:</h3><h2>)=====";
+  out_http_text += ControllerName + R"=====(</h2></div><fieldset><legend><b>&nbsp;Counter values&nbsp;</b></legend><p><b>Counter for input #1</b><br><input id="in1" placeholder=" " value=")=====";
+  tmpStr = String(curConfig.counter_01);
+  out_http_text += tmpStr + R"=====(" name="in1"><div/> <button style="width:48%;" name="" onclick="gv(1)">Load current</button> <button class="button bgrn" style="width:48%;" name="" onclick="sv(1)">Set value</button><hr></p><p>
+ <b>Counter for input #2</b><br><input id="in2" placeholder=" " value=")=====";
+  tmpStr = String(curConfig.counter_02);
+  out_http_text += tmpStr + R"=====(" name="in2"><div/> <button style="width:48%;" name="" onclick="gv(2)">Load current</button> <button class="button bgrn" style="width:48%;" name="" onclick="sv(2)">Set value</button><hr></p><p>
+ <b>Reboot counter</b><br><input id="in0" placeholder=" " value=")=====";
+  tmpStr = String(curConfig.counter_reboot);
+  out_http_text += tmpStr + R"=====(" name="in0"><div/><button class="button bgrn" style="width:100%;" name="" onclick="sv(0)">Set value</button></p></fieldset><div></div><p></p><form action="config" method="get">
+ <button style="width:100%;">Configuration</button> <div></div></form><hr><form action="reboot" method="get"><div></div> <button class="button bred" name="">Reset</button>)=====" + CSW_PAGE_FOOTER;
+  #ifdef DEBUG_LEVEL_PORT       // вывод в порт при отладке кода 
+  Serial.println("WEB >>> index page");    
+  #endif  
+  WEB_Server.send ( 200, "text/html", out_http_text );
+  f_Has_WEB_Server_Connect = true;                                            // взводим флаг наличия изменений
+}
+
+void handleConfigPage() { // процедура генерации страницы с конфигурацией 
+  String tmpStr; 
+  String out_http_text = CSW_PAGE_TITLE;
   out_http_text += ControllerName +
  R"=====( config</title><script> var x=null,lt,to,tp,pc='';function eb(s){return document.getElementById(s);}function qs(s){return document.querySelector(s);}
  function sp(i){eb(i).type=(eb(i).type==='text'?'password':'text');}function wl(f){window.addEventListener('load',f);}function jd(){var t=0,i=document.querySelectorAll('input,button,textarea,select'); 
  while(i.length>=t){ if(i[t]){i[t]['name']=(i[t].hasAttribute('id')&&(!i[t].hasAttribute('name')))?i[t]['id']:i[t]['name'];}t++;}} wl(jd); </script>)=====" + CSW_PAGE_STYLE +
  R"=====( </head><body> <div style="text-align:left;display:inline-block;color:#eaeaff;min-width:340px;"> <div style="text-align:center;color:#eaeaea;"> <noscript>To use this page, please enable JavaScript<br></noscript>
- <h3>Impulse counters module configuration</h3><h2>)=====";
+ <h3>Configuration for signal counting module:</h3><h2>)=====";
   out_http_text += ControllerName +
  R"=====(</h2></div><fieldset><legend><b>&nbsp;Network parameters&nbsp;</b></legend>
  <form method="get" action="applay"><p><b>WiFi SSID</b> [)=====";
@@ -405,8 +458,9 @@ void handleRootPage() { // процедура генерации основно�
   out_http_text += tmpStr + R"=====(]<br><input id="tl" placeholder=")=====";
   out_http_text += tmpStr + R"=====(" value=")=====";
   out_http_text += tmpStr + R"=====(" name="tl"></p><br><button name="save" type="submit" class="button bgrn">Save</button></form></fieldset> 
- <div></div><p></p><form action="" method="get"><button name="">Reload current</button><div></div></form><hr><form action="reboot" method="get"><div></div>
- <button name="">Reset</button>)=====" + CSW_PAGE_FOOTER;
+ <p></p><form action="config" method="get"><div></div><button name="">Reload current</button></form><div></div><form action="/" method="get">
+ <button name="">Main page</button><div></div></form><hr><form action="reboot" method="get"><div></div><button class="button bred" name="">Reset</button>
+  )=====" + CSW_PAGE_FOOTER;
   #ifdef DEBUG_LEVEL_PORT       // вывод в порт при отладке кода 
   Serial.println("WEB >>> Root page");    
   #endif  
@@ -420,11 +474,11 @@ void handleRebootPage() { // процедура обработки страни�
   out_http_text += ControllerName + " reboot</title>" + CSW_PAGE_STYLE +
  R"=====(<script>setInterval(function(){getData();},1000);function getData() {var xhttp = new XMLHttpRequest(); xhttp.onreadystatechange=function() {if (this.readyState == 4 && this.status == 200) {
  if (this.responseText=="alive"){window.location='/';}}};xhttp.open("GET","alive",true);xhttp.send();}</script>	
- </head><body><div style='text-align:left;display:inline-block;color:#eaeaea;min-width:340px;'><div style="text-align:center;color:#eaeaea;"><h3>Amplifier control module configuration</h3><h2>)=====";
+ </head><body><div style='text-align:left;display:inline-block;color:#eaeaea;min-width:340px;'><div style="text-align:center;color:#eaeaea;"><h3>Signal counting module:</h3><h2>)=====";
   out_http_text += ControllerName + R"=====(</h2><br><noscript>To use this page, please enable JavaScript<br></noscript><br><div><a id="blink">)=====";
   if (f_ApplayChanges) out_http_text += "Changes applied." + message_str; 
     else out_http_text += "Reset and reboot." + message_str; 
-  out_http_text += R"=====(</a></div><br><div></div><p><form action='/' method='get'><button>Configuration</button>)=====" + CSW_PAGE_FOOTER;
+  out_http_text += R"=====(</a></div><br><div></div><p><form action='/' method='get'><button>Main page</button>)=====" + CSW_PAGE_FOOTER;
   #ifdef DEBUG_LEVEL_PORT       // вывод в порт при отладке кода 
   Serial.println("WEB >>> Reboot page");    
   #endif  
@@ -438,9 +492,9 @@ void handleNotFoundPage() { // процедура генерации стран�
   String out_http_text = CSW_PAGE_TITLE;
   out_http_text += ControllerName +" - Page not found</title>" + CSW_PAGE_STYLE;
   out_http_text += R"=====(</head><body><div style='text-align:left;display:inline-block;color:#eaeaea;min-width:340px;'>
- <div style="text-align:center;color:#eaeaea;"><h3>Counters module configuration</h3><h2>)=====";
+ <div style="text-align:center;color:#eaeaea;"><h3>Signal counting module:</h3><h2>)=====";
   out_http_text += ControllerName + R"=====(</h2><div><a id="blink" style="font-size:2em" > 404! Page not found...</a>
- </div><br><div></div><p><form action='/' method='get'><button>Return</button>)=====" + CSW_PAGE_FOOTER;
+ </div><br><div></div><p><form action='/' method='get'><button>Main page</button>)=====" + CSW_PAGE_FOOTER;
    #ifdef DEBUG_LEVEL_PORT       // вывод в порт при отладке кода 
   Serial.println("WEB >>> Page not found. Error 404!...");    
   #endif  
@@ -542,7 +596,7 @@ void handleCheckAlivePage() { // процедура проверки стату�
   WEB_Server.send(200, "text/plane", "alive");
 }
 
-void handleGetDataPage() { // получения данных по номеру переданного счётчика
+void handleGetDataPage() { // получения данных счётчика через WEB
   // передать данные о счётчике номер которого указан в строке запроса
   String ArgName  = "";
   String ArgValue = "";
@@ -568,7 +622,64 @@ void handleGetDataPage() { // получения данных по номеру 
   #endif
   WEB_Server.send(200, "text/plane", CntrResult);
 }
-   
+
+void handleSetDataPage() { // установить значение счётчика через WEB
+  // установить значение счётчика номер которого указан в строке запроса 
+  String ArgName  = "";
+  String ArgValue = "";
+  uint8_t _CntrNum = 0;
+  uint32_t _CntrValue = 0;
+  String ResultValue = "";
+
+  Serial.printf("Open URL:[%s] with [%u] arguments.\n",WEB_Server.uri(),WEB_Server.args());  
+
+  if (WEB_Server.args() > 1) {                                                // если параметры переданы - то занимаемся их обработкой  
+    ArgName = WEB_Server.argName(0);                                          // имя первого параметра - "cntr"
+    ArgValue = WEB_Server.arg(0);                                             // значение первого параметра - это номер счётчика        
+    ArgValue.trim();                                                          // чистим от пробелов
+    
+    Serial.printf("First argument: [%s]=[%s] \n",ArgName,ArgValue);
+
+    if (ArgName.equals("cntr") and isNumeric(ArgValue,true)) {                // проверяем на то, что в поле есть актуальное значение
+      _CntrNum = ArgValue.toInt();
+      ArgName = WEB_Server.argName(1);                                        // второй параметр это должно быть - "value"
+      ArgValue = WEB_Server.arg(1);                                           // а это значение, которое нужно присвоить
+      ArgValue.trim();           
+
+      Serial.printf("Second argument: [%s]=[%s] \n",ArgName,ArgValue);      
+
+      if (ArgName.equals("value") and isNumeric(ArgValue,true)) {             // если имя аргумента совпало и значение его - число, то 
+        _CntrValue = ArgValue.toInt();                                        // собственно запоминаем нужное значение
+        // и присваиваем его нужному счётчику
+        switch (_CntrNum) {
+          case 0:
+            curConfig.counter_reboot = _CntrValue;
+            break;        
+          case 1:
+            curConfig.counter_01 = _CntrValue;
+            break;        
+          case 2:
+            curConfig.counter_02 = _CntrValue;
+            break;        
+          default:
+          ResultValue = "Error !!! Can't assign value ["+ArgValue+"] to counter ["+String(_CntrNum)+"].";            
+        } 
+        // если результирующая строка пуста - присвоение прошло успешно
+        if (ResultValue.isEmpty()) {
+          ResultValue = String(_CntrValue);
+          CheckAndUpdateEEPROM();                                     // проверяем конфигурацию и записываем новые значения
+          #ifdef DEBUG_LEVEL_PORT       // вывод в порт при отладке кода 
+          Serial.printf("Set counter [%u] = [%u]\n",_CntrNum, _CntrValue);
+          #endif  
+        }
+      }  
+    }
+  }
+  #ifdef DEBUG_LEVEL_PORT       // вывод в порт при отладке кода 
+  Serial.printf("WEB <<< Set counter. Result = [%s] \n",ResultValue);
+  #endif
+  WEB_Server.send(200, "text/plane", ResultValue);
+}
 
 // -------------------------- описание call-back функции MQTT клиента ------------------------------------
 
@@ -660,11 +771,13 @@ void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties 
 
 void webServerTask(void *pvParam) { // задача по обслуживанию WEB сервера модуля
 // присваиваем ресурсы (страницы) нашему WEB серверу - страницы объявлены заранее и являются статическими
-  WEB_Server.on("/", handleRootPage);		                              // корневая страница с конфигурацией
+  WEB_Server.on("/", handleRootPage);		                              // корневая страница с данными счётчиков
+  WEB_Server.on("/config", handleConfigPage);		                      // страница изменения конфигурации
   WEB_Server.on("/applay",handleApplayPage);                          // страница, применения изменений - на котрую передаются данные для новой конфигурации
   WEB_Server.on("/reboot",handleRebootPage);                          // страница автоматической перезагрузки контроллера 
   WEB_Server.on("/alive",handleCheckAlivePage);                       // страница для проверки стстуса контроллера и перенаправления на основную страницу
   WEB_Server.on("/get_data",handleGetDataPage);                       // передать данные о счётчике номер которого указан в строке запроса
+  WEB_Server.on("/set_data",handleSetDataPage);                       // установить значение счётчика номер которого указан в строке запроса  
   WEB_Server.onNotFound(handleNotFoundPage);		                      // страница с 404-й ошибкой   
 
   bool _FirstTime = true;

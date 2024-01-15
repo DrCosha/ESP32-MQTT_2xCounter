@@ -10,8 +10,8 @@
 
 String CSW_PAGE_TITLE = R"=====(<!DOCTYPE html><html lang="en" class=""><head><meta charset="utf-8"> <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"><title>)=====";
 String CSW_PAGE_STYLE = R"=====(<style> div,fieldset,input,select{padding:5px;font-size:1em;} fieldset{background:#4f4f4f;} p{margin:0.5em 0;}
- input{width:100%;box-sizing:border-box;-webkit-box-sizing:border-box;-moz-box-sizing:border-box;background:#dddddd;color:#000000;}
- input[type=checkbox], input[type=radio]{width:1em;margin-right:6px;vertical-align:-1px;} input[type=range]{width:99%;} select{width:100%;background:#dddddd;color:#000000;}
+ input{width:100%;box-sizing:border-box;-webkit-box-sizing:border-box;-moz-box-sizing:border-box;background:#dddddd;color:#000000;font-size:medium;}
+ input[type=checkbox], input[type=radio]{width:1em;margin-right:6px;vertical-align:-1px;} input[type=range]{width:99%;} select{width:100%;background:#dddddd;color:#000000;font-size:medium;}
  textarea{resize:vertical;width:98%;height:318px;padding:5px;overflow:auto;background:#1f1f1f;color:#65c115;} body{text-align:center;font-family:verdana,sans-serif;background:#252525;}
  td{padding:0px;} button{border:0;border-radius:0.3rem;background:#1fa3ec;color:#faffff;line-height:2.4rem;font-size:1.2rem;width:100%;-webkit-transition-duration:0.4s;transition-duration:0.4s;cursor:pointer;}
  button:hover{background:#0e70a4;} .bred{background:#d43535;}.bred:hover{background:#931f1f;}.bgrn{background:#47c266;}.bgrn:hover{background:#5aaf6f;} a{color:#1fa3ec;text-decoration:none;}
