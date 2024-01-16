@@ -1,6 +1,8 @@
 # ESP32-MQTT_2xCounter
 Firware for ESP32s module with AC power-in sensor.  Module count  incoming pulses in 2 counters and storing this values for external access. For access to counters value you can use MQTT and HTTP. Initial settings and counters start value set via built-in WEB server. Module have AC power-in sensor and save data in FLASH memory if his cut off. 
 
+![Common view of ESP32-MQTT_2xCounter module rev1](https://github.com/DrCosha/ESP32-MQTT_2xCounter/blob/main/images/assembled_pcb_top_view.png)
+
 ### Модуль счётчиков внешних импульсов на ESP32s с датчиком отключения питания.
 
 <br> Данный модуль может использоватся для подсчёта внешних импульсов от счётчиков тепла/электричества/воды. Подсчёт ведется путем замыкания входных клемм __[INP1]__ и __[INP2]__. Замыкание соответсвующего вывода индицируется светодиодом __LED1__ и __LED2__.
