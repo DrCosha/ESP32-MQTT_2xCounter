@@ -22,8 +22,8 @@ Firware for ESP32s module with AC power-in sensor.  Module count  incoming pulse
 которая будет доступна по адресу default gateway точки доступа. Эти же настройки доступны и при успешном подключении модуля к WiFi сети. Адрес при этом будет получен динамически от вашего маршрутизатора. Поддерживается только сеть 2.4МГц (это ограничение самого ESP32).
 Общий вид страниц работы со значениями счётчиков и с общей конфигурацией модуля приведены ниже. Доступ через эти страницы позволяет полностью настроить доступ как к WiFi сети, так и к MQTT серверу. 
 
-![Working with counters value](https://github.com/DrCosha/ESP32-MQTT_2xCounter/blob/main/images/Common_circuit_v1.png)  
-![Working with module configuration](https://github.com/DrCosha/ESP32-MQTT_2xCounter/blob/main/images/Common_circuit_v1.png)  
+![Working with counters value](https://github.com/DrCosha/ESP32-MQTT_2xCounter/blob/main/images/page_index.png)
+![Working with module configuration](https://github.com/DrCosha/ESP32-MQTT_2xCounter/blob/main/images/page_config.png)  
 
 Встроенный WEB сервер можно так же использовать для работы со значениями счётчиков в текущий момент времени. 
 
