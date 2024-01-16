@@ -20,8 +20,10 @@ Firware for ESP32s module with AC power-in sensor.  Module count  incoming pulse
 
 Если при старте модуля он не смог установить соединение с WiFi сетью вашего роутера, то будет поднята собственная точка доступа с именем **CNTR_xxxx**, где **хххх** - последние цифры MAC адреса ESP32s. После поднятия точки доступа, можно соединится со страницей настроек модуля,
 которая будет доступна по адресу default gateway точки доступа. Эти же настройки доступны и при успешном подключении модуля к WiFi сети. Адрес при этом будет получен динамически от вашего маршрутизатора. Поддерживается только сеть 2.4МГц (это ограничение самого ESP32).
-Общий вид страницы настроек приведен на изображении ниже. Отдельным пунктом меню можно обнулить оба счётчика по отдельности. 
+Общий вид страниц работы со значениями счётчиков и с общей конфигурацией модуля приведены ниже. Доступ через эти страницы позволяет полностью настроить доступ как к WiFi сети, так и к MQTT серверу. 
 
+![Working with counters value](https://github.com/DrCosha/ESP32-MQTT_2xCounter/blob/main/images/Common_circuit_v1.png)  
+![Working with module configuration](https://github.com/DrCosha/ESP32-MQTT_2xCounter/blob/main/images/Common_circuit_v1.png)  
 
 Встроенный WEB сервер можно так же использовать для работы со значениями счётчиков в текущий момент времени. 
 
@@ -40,8 +42,6 @@ Firware for ESP32s module with AC power-in sensor.  Module count  incoming pulse
 - топик рапортов о текущих заначениях **[STATUS]**;
 
 Если модуль получает в топике **[SET]** команду {report}, то сразу публикует в топике **[STATUS]** своё текущее состояние. Иначе, своё текущее состояние модуль публикует каждые 60 минут.
-
-![Schematic of ESP32-MQTT_2xCounter rev1](https://github.com/DrCosha/ESP32-MQTT_2xCounter/blob/main/images/Common_circuit_v1.png)
 
 ### Команды и статусы
 
