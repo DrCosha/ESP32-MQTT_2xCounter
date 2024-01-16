@@ -2,7 +2,7 @@
 ************************************************************************
 *         Firmware для управления контроллером подсчёта импульсов
 *                         (с) 2024, by Dr@Cosha
-*                               ver 0.1                    
+*                               ver 1.0b                    
 ************************************************************************
 
 
@@ -77,6 +77,7 @@ extern "C" {
 #include "freertos/timers.h"
 #include "freertos/semphr.h"
 #include "esp_mac.h"
+#include "soc/rtc_wdt.h"
 }
 
 #include "GyverButton.h"
@@ -86,7 +87,9 @@ extern "C" {
 #include "webPageConst.h"                         // сюда вынесены все константные строки для генерации WEB страниц
 
 // устанавливаем режим отладки
-#define DEBUG_LEVEL_PORT                          // устанавливаем режим отладки через порт
+// #define DEBUG_LEVEL_PORT                          // устанавливаем режим отладки через порт
+
+#define FW_VERSION "v1.0b"                        // версия ПО
 
 // определение пинов подключения переферии
 #define PIN_INP_CH1 25                            // пин подключения кнопки POWER 
@@ -106,9 +109,10 @@ extern "C" {
 #define C_WIFI_AP_WAIT 180000                     // таймуат поднятой AP без соединения с клиентами (после этого опять пытаемся подключится как клиент) (180 сек)
 #define C_WIFI_CYCLE_WAIT 10000                   // таймуат цикла переустановки соединения с WiFi (10 сек)
 #define C_BLINKER_DELAY 300                       // задержка для мигания индикаторными светодиодами
+#define C_COUNTER_DELAY 50                        // задержка для подавления дребезга на счётных входах 50ms - нижняя граница пропускания 20Гц
 
 // задержки в формировании MQTT отчета
-#define C_MQTT_REPORT_DELAY  3600000              // 1 час между репортами
+#define C_REPORT_DELAY  3600000                   // 1 час между репортами
 
 // начальные параметры устройства для подключения к WiFi и MQTT
 #ifdef DEBUG_LEVEL_PORT
@@ -212,6 +216,9 @@ bool f_WEB_Server_Enable = false;               // флаг разрешения
 bool f_Has_WEB_Server_Connect = false;          // флаг обнаружения соединения с WEB страницей встроенного WEB сервера
 bool f_HasMQTTCommand = false;                  // флаг наличия команды по MQTT
 bool f_Has_Report = false;                      // флаг необходимости вывода отчета
+bool f_FireInp01 = false;                       // флаг не обработанного прерывания по входу 01
+bool f_FireInp02 = false;                       // флаг не обработанного прерывания по входу 02
+bool f_FireCutOff = false;                      // флаг сработки прерывания у сенсора пропажи питания
 
 // создаем буфера и структуры данных
 GlobalParams   curConfig;                       // набор параметров управляющих текущей конфигурацией
@@ -232,6 +239,7 @@ StaticJsonDocument<512> InputJSONdoc,          // создаем входящи�
 
 // создаем мьютексы для синхронизации доступа к данным
 SemaphoreHandle_t sem_InputJSONdoc = xSemaphoreCreateBinary();                           // создаем двоичный семафор для доступа к JSON документу 
+SemaphoreHandle_t sem_CurConfigWrite = xSemaphoreCreateBinary();                         // создаем двоичный семафор для блокирования конфигурации при записи в EEPROM  
 
 // наименование 
 String ControllerName = "CNTR_";                                                         // имя нашего контроллера
@@ -305,11 +313,10 @@ void CheckAndUpdateEEPROM() { // проверяем конфигурацию и 
 
   if (!s_EnableEEPROM) return;    // если работаем без EEPROM - выходим сразу
   // иначе читаем старый конфиг в oldConfig, сравниваем его с текущим curConfig и если нужно, записываем в EEPROM
-  EEPROM.get(0,oldConfig);                                                 // читаем блок конфигурации из EEPROM
-  old_CRC = GetCrc16Simple((uint8_t*)&oldConfig, sizeof(oldConfig)-4);     // считаем CRC16 для него
-  cur_CRC = GetCrc16Simple((uint8_t*)&curConfig, sizeof(curConfig)-4);     // считаем CRC16 для текущих параметров
-  curConfig.simple_crc16 = cur_CRC;                                        // сохраняем CRC16 текущего блока параметров
-  
+  EEPROM.get(0,oldConfig);                                                  // читаем блок конфигурации из EEPROM
+  old_CRC = GetCrc16Simple((uint8_t*)&oldConfig, sizeof(oldConfig)-4);      // считаем CRC16 для него
+  cur_CRC = GetCrc16Simple((uint8_t*)&curConfig, sizeof(curConfig)-4);      // считаем CRC16 для текущих параметров
+  curConfig.simple_crc16 = cur_CRC;                                         // сохраняем CRC16 текущего блока параметров  
 #ifdef DEBUG_LEVEL_PORT                
   if (cur_CRC != old_CRC) { //  если конфигурации отличаются - сохраняем новую
       EEPROM.put(0,curConfig);     
@@ -362,12 +369,10 @@ void cmdReset() { // команда сброса конфигурации до �
 
 void cmdClearConfig_Reset() { // команда сброса конфигурации до состояния по умолчанию и перезагрузка
   if (s_EnableEEPROM) { // если EEPROM разрешен и есть             
-      SetConfigByDefault();                                                                  // в конфигурацию записываем значения по умолчанию
-      curConfig.simple_crc16 = GetCrc16Simple((uint8_t*)&curConfig, sizeof(curConfig)-4);    // считаем CRC16 для конфигурации
-      EEPROM.put(0,curConfig);                                                               // записываем конфигурацию
-      EEPROM.commit();                                                                       // подтверждаем изменения
-    }  
-  cmdReset();                                                                                // перезагружаемся  
+      SetConfigByDefault();                                                                   // в конфигурацию записываем значения по умолчанию
+      curConfig.simple_crc16 = GetCrc16Simple((uint8_t*)&curConfig, sizeof(curConfig)-4);     // считаем CRC16 для конфигурации
+  }  
+  cmdReset();                                                                                 // перезагружаемся  
 }
 
 void cmdSetCounterValue(const Counters_t Cntr, uint32_t CntrValue) { // функция принудительной установки значения счётчика
@@ -385,6 +390,7 @@ void cmdSetCounterValue(const Counters_t Cntr, uint32_t CntrValue) { // функ
     curConfig.counter_02 = CntrValue;    
     break;
   }
+  curConfig.simple_crc16 = GetCrc16Simple((uint8_t*)&curConfig, sizeof(curConfig)-4);     // считаем CRC16 для текущих параметров  
   f_Has_Report = true; 
 }
 
@@ -400,7 +406,7 @@ void handleRootPage() { // процедура генерации основно�
  xhttp.open("GET", "set_data?cntr="+count_num+"&value="+document.getElementById("in"+count_num).value, true);	xhttp.send();} function jd(){ var t=0, i=document.querySelectorAll('input,button,textarea,select');	while(i.length>=t){ 
  if(i[t]){ i[t]['name']=(i[t].hasAttribute('id')&&(!i[t].hasAttribute('name')))?i[t]['id']:i[t]['name'];} t++;}} wl(jd);</script></head>
  <body><div style="text-align:left;display:inline-block;color:#eaeaff;min-width:340px;"><div style="text-align:center;color:#eaeaea;"><noscript>To use this page, please enable JavaScript<br></noscript><h3>Signal counting module:</h3><h2>)=====";
-  out_http_text += ControllerName + R"=====(</h2></div><fieldset><legend><b>&nbsp;Counter values&nbsp;</b></legend><p><b>Counter for input #1</b><br><input id="in1" placeholder=" " value=")=====";
+  out_http_text += ControllerName + R"=====(</h2><h4 style="color: #8f8f8f;">firmware )=====" + FW_VERSION + R"=====(</h4></div><fieldset><legend><b>&nbsp;Counter values&nbsp;</b></legend><p><b>Counter for input #1</b><br><input id="in1" placeholder=" " value=")=====";
   tmpStr = String(curConfig.counter_01);
   out_http_text += tmpStr + R"=====(" name="in1"><div/> <button style="width:48%;" name="" onclick="gv(1)">Load current</button> <button class="button bgrn" style="width:48%;" name="" onclick="sv(1)">Set value</button><hr></p><p>
  <b>Counter for input #2</b><br><input id="in2" placeholder=" " value=")=====";
@@ -462,7 +468,7 @@ void handleConfigPage() { // процедура генерации страни�
  <button name="">Main page</button><div></div></form><hr><form action="reboot" method="get"><div></div><button class="button bred" name="">Reset</button>
   )=====" + CSW_PAGE_FOOTER;
   #ifdef DEBUG_LEVEL_PORT       // вывод в порт при отладке кода 
-  Serial.println("WEB >>> Root page");    
+  Serial.println("WEB >>> config page");    
   #endif  
   WEB_Server.send ( 200, "text/html", out_http_text );
   f_Has_WEB_Server_Connect = true;                                            // взводим флаг наличия изменений
@@ -480,7 +486,7 @@ void handleRebootPage() { // процедура обработки страни�
     else out_http_text += "Reset and reboot." + message_str; 
   out_http_text += R"=====(</a></div><br><div></div><p><form action='/' method='get'><button>Main page</button>)=====" + CSW_PAGE_FOOTER;
   #ifdef DEBUG_LEVEL_PORT       // вывод в порт при отладке кода 
-  Serial.println("WEB >>> Reboot page");    
+  Serial.println("WEB >>> reboot page");    
   #endif  
   f_ApplayChanges = false;
   WEB_Server.send(200, "text/html", out_http_text);
@@ -496,7 +502,7 @@ void handleNotFoundPage() { // процедура генерации стран�
   out_http_text += ControllerName + R"=====(</h2><div><a id="blink" style="font-size:2em" > 404! Page not found...</a>
  </div><br><div></div><p><form action='/' method='get'><button>Main page</button>)=====" + CSW_PAGE_FOOTER;
    #ifdef DEBUG_LEVEL_PORT       // вывод в порт при отладке кода 
-  Serial.println("WEB >>> Page not found. Error 404!...");    
+  Serial.println("WEB >>> not found page");    
   #endif  
   WEB_Server.send ( 404, "text/html", out_http_text );
 }
@@ -630,36 +636,27 @@ void handleSetDataPage() { // установить значение счётчи
   uint8_t _CntrNum = 0;
   uint32_t _CntrValue = 0;
   String ResultValue = "";
-
-  Serial.printf("Open URL:[%s] with [%u] arguments.\n",WEB_Server.uri(),WEB_Server.args());  
-
   if (WEB_Server.args() > 1) {                                                // если параметры переданы - то занимаемся их обработкой  
     ArgName = WEB_Server.argName(0);                                          // имя первого параметра - "cntr"
     ArgValue = WEB_Server.arg(0);                                             // значение первого параметра - это номер счётчика        
     ArgValue.trim();                                                          // чистим от пробелов
-    
-    Serial.printf("First argument: [%s]=[%s] \n",ArgName,ArgValue);
-
     if (ArgName.equals("cntr") and isNumeric(ArgValue,true)) {                // проверяем на то, что в поле есть актуальное значение
       _CntrNum = ArgValue.toInt();
       ArgName = WEB_Server.argName(1);                                        // второй параметр это должно быть - "value"
       ArgValue = WEB_Server.arg(1);                                           // а это значение, которое нужно присвоить
       ArgValue.trim();           
-
-      Serial.printf("Second argument: [%s]=[%s] \n",ArgName,ArgValue);      
-
       if (ArgName.equals("value") and isNumeric(ArgValue,true)) {             // если имя аргумента совпало и значение его - число, то 
         _CntrValue = ArgValue.toInt();                                        // собственно запоминаем нужное значение
         // и присваиваем его нужному счётчику
         switch (_CntrNum) {
           case 0:
-            curConfig.counter_reboot = _CntrValue;
+            cmdSetCounterValue(CN_REBOOT, _CntrValue);            
             break;        
           case 1:
-            curConfig.counter_01 = _CntrValue;
+            cmdSetCounterValue(CN_CNT01, _CntrValue);
             break;        
           case 2:
-            curConfig.counter_02 = _CntrValue;
+            cmdSetCounterValue(CN_CNT02, _CntrValue);            
             break;        
           default:
           ResultValue = "Error !!! Can't assign value ["+ArgValue+"] to counter ["+String(_CntrNum)+"].";            
@@ -955,7 +952,69 @@ void wifiTask(void *pvParam) { // задача установления и по�
   }  
 }
 
+// ====================== обработчики прерываний для счётчиков и сенсора питания =========================
+
+void IRAM_ATTR ISR_handler_counter01() { // описание обработчика прерывания для счётчика #1
+// срабатывание происходит при переходе с высокого на низкий уровень (замыкание внешнего контакта)
+  if (!f_FireInp01 and !f_FireCutOff) {   // если это новое срабатывание до снятия флага обработки и это не момент снятия питания
+    tm_LastFireInp01 = millis();          // запоминаем время сработки 
+    f_FireInp01 = true;                   // взводим флаг необходимости обработки
+  }
+}
+
+void IRAM_ATTR ISR_handler_counter02() { // описание обработчика прерывания для счётчика #2
+// срабатывание происходит при переходе с высокого на низкий уровень (замыкание внешнего контакта)
+  if (!f_FireInp02 and !f_FireCutOff) {   // если это новое срабатывание до снятия флага обработки и это не момент снятия питания
+    tm_LastFireInp02 = millis();          // запоминаем время сработки 
+    f_FireInp02 = true;                   // взводим флаг необходимости обработки
+  }
+ }
+
+void IRAM_ATTR ISR_handler_cutoff_sensor() { // описание обработчика прерывания для датчика пропадания питания
+  // срабатывание происходит при переходе с низкого на высокий уровень
+  f_FireCutOff = true;
+}
+
 // ================================== основные задачи времени выполнения =================================
+
+void countingTask(void *pvParam) { // задача основной обработки по подсчёту импульсов с подавлением дребезга и сохранением данных при потере питания
+  while (true) {
+    // обработка входа #1
+    if (f_FireInp01 and ((millis()-C_COUNTER_DELAY)>tm_LastFireInp01)) { // обработка импульса по входу #1 с подавлением дребезга выше 10Гц
+      curConfig.counter_01 ++;
+      curConfig.simple_crc16 = GetCrc16Simple((uint8_t*)&curConfig, sizeof(curConfig)-4);      // считаем CRC
+      f_FireInp01 = false;
+    }
+    // обработка входа #2    
+    if (f_FireInp02 and ((millis()-C_COUNTER_DELAY)>tm_LastFireInp02)) { // обработка импульса по входу #1 с подавлением дребезга выше 10Гц
+      curConfig.counter_02 ++;
+      curConfig.simple_crc16 = GetCrc16Simple((uint8_t*)&curConfig, sizeof(curConfig)-4);      // считаем CRC
+      f_FireInp02 = false;
+    }
+    // обработка сигнала пропадания питания Cut-Off
+    if (f_FireCutOff) {  
+      #ifdef DEBUG_LEVEL_PORT
+      Serial.println("Power cut-off detected. Save values."); 
+      #endif   
+      if (s_EnableEEPROM) {                                                                    // если EEPROM разрешен - просто его записываем
+        EEPROM.put(0,curConfig);                                                               // пишем EEPROM
+        EEPROM.commit();                                                                       // коммитим изменения 
+      }    
+      #ifdef DEBUG_LEVEL_PORT
+      Serial.println("Save & commit complete."); 
+      #endif 
+ 	    // публикуем событие о том, что мы померли
+      if (mqttClient.connected()) {
+        mqttClient.publish(curConfig.lwt_topic, 0, true, jv_OFFLINE);                          // публикуем в топик LWT_TOPIC событие о своей смерти
+        #ifdef DEBUG_LEVEL_PORT                                      
+        Serial.printf("Publishing LWT offline state in [%s]. QoS 0. \n", curConfig.lwt_topic); 
+        #endif                     
+      }  
+      vTaskDelay(C_REPORT_DELAY);                                                             // вгоняем чип в задержку до конца питания
+    }
+    vTaskDelay(1/portTICK_PERIOD_MS); 
+  }
+}
 
 void eventHandlerTask (void *pvParam) { // задача обработки событий получения команды от датчика, таймера, MQTT, OneWire, кнопок
   uint8_t         new_light_mode = 0;                       // новый режим работы подсветки индикатора    
@@ -1050,7 +1109,7 @@ void applayChangesTask (void *pvParam) { // применяем изменени�
 
 void reportTask (void *pvParam) { // репортим о текущем состоянии в MQTT и если отладка то и в Serial
   while (true) {
-    if (((millis()-tm_LastReportToMQTT)>C_MQTT_REPORT_DELAY) || f_Has_Report) {  // если наступило время отчёта или взведен флаг наличия отчета
+    if (((millis()-tm_LastReportToMQTT)>C_REPORT_DELAY) || f_Has_Report) {  // если наступило время отчёта или взведен флаг наличия отчета
       if (mqttClient.connected()) {  // если есть связь с MQTT - репорт в топик
         // ---------------------------------------------------------------------------------
         // рапортуем в главный топик статуса [curConfig.report_topic]
@@ -1195,6 +1254,7 @@ void setup() { // инициализация контроллера и прог�
 
   // увеличиваем счетчик перезагрузок 
   curConfig.counter_reboot++;
+  curConfig.simple_crc16 = GetCrc16Simple((uint8_t*)&curConfig, sizeof(curConfig)-4);   // и сразу пересчитываем CRC
 
   // настраиваем MQTT клиента
   mqttClient.setCredentials(curConfig.mqtt_usr,curConfig.mqtt_pwd);
@@ -1208,12 +1268,14 @@ void setup() { // инициализация контроллера и прог�
 
   // настраиваем семафоры - сбрасываем их
   xSemaphoreGive(sem_InputJSONdoc);
+  xSemaphoreGiveFromISR(sem_CurConfigWrite,NULL);
   
   // создаем отдельные параллельные задачи, выполняющие группы функций  
   // стартуем основные задачи
   if (xTaskCreate(eventHandlerTask, "events", 4096, NULL, 1, NULL) != pdPASS) Halt("Error: Event handler task not created!");     // все плохо, задачу не создали
   if (xTaskCreate(applayChangesTask, "applay", 4096, NULL, 1, NULL) != pdPASS) Halt("Error: Applay changes task not created!");   // все плохо, задачу не создали
   if (xTaskCreate(reportTask, "report", 4096, NULL, 1, NULL) != pdPASS) Halt("Error: Report task not created!");                  // все плохо, задачу не создали
+  if (xTaskCreate(countingTask, "count", 4096, NULL, 1, NULL) != pdPASS) Halt("Error: Report task not created!");                 // все плохо, задачу не создали
   // стартуем коммуникационные задачи
   if (xTaskCreate(wifiTask, "wifi", 4096*2, NULL, 1, NULL) != pdPASS) Halt("Error: WiFi communication task not created!");        // все плохо, задачу не создали
   if (xTaskCreate(webServerTask, "web", 4096*2, NULL, 1, NULL) != pdPASS) Halt("Error: Web server task not created!");            // все плохо, задачу не создали
@@ -1221,5 +1283,9 @@ void setup() { // инициализация контроллера и прог�
 }
 
 void loop() { // не используемый основной цикл
+  // присваиваем обработчики прерываний на счётчики и датчик питания
+  attachInterrupt(PIN_INP_CH1,&ISR_handler_counter01,FALLING);			      // назначаем прерывание на GPIO входа #1 по ниспадающему фронту
+  attachInterrupt(PIN_INP_CH2,&ISR_handler_counter02,FALLING);			      // назначаем прерывание на GPIO входа #2 по ниспадающему фронту
+  attachInterrupt(PIN_INP_AC_CUTOFF,&ISR_handler_cutoff_sensor,RISING);		// назначаем прерывание на GPIO датчика пропажи питания по восходящему фронту
   vTaskDelete(NULL);   // удаляем не нужную задачу loop()  
 }
