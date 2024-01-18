@@ -2,7 +2,7 @@
 ************************************************************************
 *         Firmware для управления контроллером подсчёта импульсов
 *                         (с) 2024, by Dr@Cosha
-*                               ver 1.1b                    
+*                               ver 1.2b                    
 ************************************************************************
 
 
@@ -47,8 +47,8 @@
 {"report"} 			              - команда немедленной генерации отчёта в топик [STATUS]
 {"reboot"} 			              - команда перезагрузки модуля с сохранением текущих счётчиков
 {"clear":"config"} 		        - сброс текущей конфигурации до начальной и перезагрузки
-{"clear":"cnt#1"} 		        - сброс счётчика №1
-{"clear":"cnt#2"} 		        - сброс счётчика №2
+{"clear":"cnt01"} 		        - сброс счётчика №1
+{"clear":"cnt02"} 		        - сброс счётчика №2
 {"clear":"reboot"}		        - сброс счётчика перезагрузок (считает от момента прошлого сброса)
 {"set_value_1":<значение>}	  - установка значения счётчика №1*
 {"set_value_2":<значение>}	  - установка значения счётчика №2*
@@ -59,7 +59,7 @@
 Ниже приведен пример отчета в JSON формате, генерируемого модулем в топик [STATUS]:
 
 
-{"cnt#1":<значение1>,"cnt#2":<значение2>,"cnt_reboot":<значение3>,"ip":<xx.xx.xx.xx>}  - где:
+{"cnt01":<значение1>,"cnt02":<значение2>,"cnt_reboot":<значение3>,"ip":<xx.xx.xx.xx>}  - где:
 
 	- <значение1>, <значение2>	- текущие значения счётчиков №1 и №2;
 	- <значение3> 			- значение счётчика перезагрузок;
@@ -89,7 +89,7 @@ extern "C" {
 // устанавливаем режим отладки
 // #define DEBUG_LEVEL_PORT                          // устанавливаем режим отладки через порт
 
-#define FW_VERSION "v1.1b"                        // версия ПО
+#define FW_VERSION "v1.2b"                        // версия ПО
 
 // определение пинов подключения переферии
 #define PIN_INP_CH1 25                            // пин подключения кнопки POWER 
@@ -146,16 +146,16 @@ extern "C" {
 #define jk_CLEAR          "clear"                 // ключ описания команды очистки (счётчиков или конфигурации)
 #define jk_SET_VALUE_01   "set_value_1"           // ключ описания установки значения счётчика 1
 #define jk_SET_VALUE_02   "set_value_2"           // ключ описания установки значения счётчика 2
-#define jk_COUNTER_01     "cnt#1"                 // ключ описания значения счётчика 1
-#define jk_COUNTER_02     "cnt#2"                 // ключ описания значения счётчика 2
+#define jk_COUNTER_01     "cnt01"                 // ключ описания значения счётчика 1
+#define jk_COUNTER_02     "cnt02"                 // ключ описания значения счётчика 2
 #define jk_COUNTER_RB     "cnt_reboot"            // ключ описания значения счётчика перезагрузок
 #define jk_IP             "ip"                    // ключ описания ip адреса
 
 // --- значения ключей и команд ---
 #define jv_ONLINE         "online"                // 
 #define jv_OFFLINE        "offline"               //
-#define jv_COUNTER_01     "cnt#1"                 //
-#define jv_COUNTER_02     "cnt#2"                 //
+#define jv_COUNTER_01     "cnt01"                 //
+#define jv_COUNTER_02     "cnt02"                 //
 #define jv_COUNTER_RB     "reboot"                //
 #define jv_CONFIG         "config"                //
 
@@ -406,7 +406,7 @@ void handleRootPage() { // процедура генерации основно�
  xhttp.open("GET", "set_data?cntr="+count_num+"&value="+document.getElementById("in"+count_num).value, true);	xhttp.send();} function jd(){ var t=0, i=document.querySelectorAll('input,button,textarea,select');	while(i.length>=t){ 
  if(i[t]){ i[t]['name']=(i[t].hasAttribute('id')&&(!i[t].hasAttribute('name')))?i[t]['id']:i[t]['name'];} t++;}} wl(jd);</script></head>
  <body><div style="text-align:left;display:inline-block;color:#eaeaff;min-width:340px;"><div style="text-align:center;color:#eaeaea;"><noscript>To use this page, please enable JavaScript<br></noscript><h3>Signal counting module:</h3><h2>)=====";
-  out_http_text += ControllerName + R"=====(</h2><h4 style="color: #8f8f8f;">firmware )=====" + FW_VERSION + R"=====(</h4></div><fieldset><legend><b>&nbsp;Counter values&nbsp;</b></legend><p><b>Counter for input #1</b><br><input id="in1" placeholder=" " value=")=====";
+  out_http_text += ControllerName + R"=====(</h2><h4 style="color: #8f8f8f;">firmware )=====" + FW_VERSION + R"=====(</h4></div><fieldset><legend><b>&nbsp;Counter values&nbsp;</b></legend><p><b>Counter for input 01</b><br><input id="in1" placeholder=" " value=")=====";
   tmpStr = String(curConfig.counter_01);
   out_http_text += tmpStr + R"=====(" name="in1"><div/> <button style="width:48%;" name="" onclick="gv(1)">Load current</button> <button class="button bgrn" style="width:48%;" name="" onclick="sv(1)">Set value</button><hr></p><p>
  <b>Counter for input #2</b><br><input id="in2" placeholder=" " value=")=====";
@@ -954,7 +954,7 @@ void wifiTask(void *pvParam) { // задача установления и по�
 
 // ====================== обработчики прерываний для счётчиков и сенсора питания =========================
 
-void IRAM_ATTR ISR_handler_counter01() { // описание обработчика прерывания для счётчика #1
+void IRAM_ATTR ISR_handler_counter01() { // описание обработчика прерывания для счётчика 01
 // срабатывание происходит при переходе с высокого на низкий уровень (замыкание внешнего контакта)
   if (!f_FireInp01 and !f_FireCutOff) {   // если это новое срабатывание до снятия флага обработки и это не момент снятия питания
     tm_LastFireInp01 = millis();          // запоминаем время сработки 
@@ -962,7 +962,7 @@ void IRAM_ATTR ISR_handler_counter01() { // описание обработчи�
   }
 }
 
-void IRAM_ATTR ISR_handler_counter02() { // описание обработчика прерывания для счётчика #2
+void IRAM_ATTR ISR_handler_counter02() { // описание обработчика прерывания для счётчика 02
 // срабатывание происходит при переходе с высокого на низкий уровень (замыкание внешнего контакта)
   if (!f_FireInp02 and !f_FireCutOff) {   // если это новое срабатывание до снятия флага обработки и это не момент снятия питания
     tm_LastFireInp02 = millis();          // запоминаем время сработки 
@@ -979,16 +979,16 @@ void IRAM_ATTR ISR_handler_cutoff_sensor() { // описание обработ�
 
 void countingTask(void *pvParam) { // задача основной обработки по подсчёту импульсов с подавлением дребезга и сохранением данных при потере питания
   while (true) {
-    // обработка входа #1
-    if (f_FireInp01 and ((millis()-C_COUNTER_DELAY)>tm_LastFireInp01)) { // обработка импульса по входу #1 с подавлением дребезга выше 20Гц
+    // обработка входа 01
+    if (f_FireInp01 and ((millis()-C_COUNTER_DELAY)>tm_LastFireInp01)) { // обработка импульса по входу 01 с подавлением дребезга выше 20Гц
       if (!digitalRead(PIN_INP_CH1)) {                                   // если сигнал на входе в низком уровне - фиксируем импульс
         curConfig.counter_01 ++;
         curConfig.simple_crc16 = GetCrc16Simple((uint8_t*)&curConfig, sizeof(curConfig)-4);      // считаем CRC
       }
       f_FireInp01 = false;
     }
-    // обработка входа #2    
-    if (f_FireInp02 and ((millis()-C_COUNTER_DELAY)>tm_LastFireInp02)) { // обработка импульса по входу #1 с подавлением дребезга выше 20Гц
+    // обработка входа 02    
+    if (f_FireInp02 and ((millis()-C_COUNTER_DELAY)>tm_LastFireInp02)) { // обработка импульса по входу 02 с подавлением дребезга выше 20Гц
       if (!digitalRead(PIN_INP_CH2)) {                                   // если сигнал на входе в низком уровне - фиксируем импульс
         curConfig.counter_02 ++;
         curConfig.simple_crc16 = GetCrc16Simple((uint8_t*)&curConfig, sizeof(curConfig)-4);      // считаем CRC
@@ -1057,7 +1057,7 @@ void eventHandlerTask (void *pvParam) { // задача обработки со�
         }  
         else {
           #ifdef DEBUG_LEVEL_PORT                                            
-          Serial.printf("!!! Value can't be assigned for counter #1 !!!\n");
+          Serial.printf("!!! Value can't be assigned for counter 01 !!!\n");
           #endif
         }
       }
@@ -1070,7 +1070,7 @@ void eventHandlerTask (void *pvParam) { // задача обработки со�
         }  
         else {
           #ifdef DEBUG_LEVEL_PORT                                            
-          Serial.printf("!!! Value can't be assigned for counter #2 !!!\n");
+          Serial.printf("!!! Value can't be assigned for counter 02 !!!\n");
           #endif
         }
       }
@@ -1238,8 +1238,8 @@ void setup() { // инициализация контроллера и прог�
     Serial.printf("  REPORT topic: %s\n", curConfig.report_topic);
     Serial.printf("  LWT topic: %s\n", curConfig.lwt_topic);
     Serial.println("---");    
-    Serial.printf("  Counter #1: %u\n", curConfig.counter_01);
-    Serial.printf("  Counter #2: %u\n", curConfig.counter_02);
+    Serial.printf("  Counter 01: %u\n", curConfig.counter_01);
+    Serial.printf("  Counter 02: %u\n", curConfig.counter_02);
     Serial.printf("  Reboot counter: %u\n", curConfig.counter_reboot);
     Serial.printf("---\n\n");
     }
