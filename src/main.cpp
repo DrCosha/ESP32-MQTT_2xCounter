@@ -1014,9 +1014,11 @@ void countingTask(void *pvParam) { // задача основной обрабо
         Serial.printf("Publishing LWT offline state in [%s]. QoS 0. \n", curConfig.lwt_topic); 
         #endif                     
       }  
-      vTaskDelay(C_REPORT_DELAY);                                                             // вгоняем чип в задержку до конца питания
+      vTaskDelay(C_REPORT_DELAY);                                                             // вгоняем чип в задержку до конца питания      
+      ESP.restart();                                                                          // и если мы еще живы, когда дошли до этого места - перезагружаемся (защита от дребезга по 220v)
+                                                                                              // возможен вариант потери полупериода-периода питания, датчик сработает, а питание восстановится
     }
-    vTaskDelay(1/portTICK_PERIOD_MS); 
+    vTaskDelay(1/portTICK_PERIOD_MS);     
   }
 }
 
