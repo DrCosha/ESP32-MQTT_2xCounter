@@ -409,7 +409,7 @@ void handleRootPage() { // процедура генерации основно�
   out_http_text += ControllerName + R"=====(</h2><h4 style="color: #8f8f8f;">firmware )=====" + FW_VERSION + R"=====(</h4></div><fieldset><legend><b>&nbsp;Counter values&nbsp;</b></legend><p><b>Counter for input 01</b><br><input id="in1" placeholder=" " value=")=====";
   tmpStr = String(curConfig.counter_01);
   out_http_text += tmpStr + R"=====(" name="in1"><div/> <button style="width:48%;" name="" onclick="gv(1)">Load current</button> <button class="button bgrn" style="width:48%;" name="" onclick="sv(1)">Set value</button><hr></p><p>
- <b>Counter for input #2</b><br><input id="in2" placeholder=" " value=")=====";
+ <b>Counter for input 02</b><br><input id="in2" placeholder=" " value=")=====";
   tmpStr = String(curConfig.counter_02);
   out_http_text += tmpStr + R"=====(" name="in2"><div/> <button style="width:48%;" name="" onclick="gv(2)">Load current</button> <button class="button bgrn" style="width:48%;" name="" onclick="sv(2)">Set value</button><hr></p><p>
  <b>Reboot counter</b><br><input id="in0" placeholder=" " value=")=====";
