@@ -406,10 +406,10 @@ void handleRootPage() { // процедура генерации основно�
  xhttp.open("GET", "set_data?cntr="+count_num+"&value="+document.getElementById("in"+count_num).value, true);	xhttp.send();} function jd(){ var t=0, i=document.querySelectorAll('input,button,textarea,select');	while(i.length>=t){ 
  if(i[t]){ i[t]['name']=(i[t].hasAttribute('id')&&(!i[t].hasAttribute('name')))?i[t]['id']:i[t]['name'];} t++;}} wl(jd);</script></head>
  <body><div style="text-align:left;display:inline-block;color:#eaeaff;min-width:340px;"><div style="text-align:center;color:#eaeaea;"><noscript>To use this page, please enable JavaScript<br></noscript><h3>Signal counting module:</h3><h2>)=====";
-  out_http_text += ControllerName + R"=====(</h2><h4 style="color: #8f8f8f;">firmware )=====" + FW_VERSION + R"=====(</h4></div><fieldset><legend><b>&nbsp;Counter values&nbsp;</b></legend><p><b>Counter for input 01</b><br><input id="in1" placeholder=" " value=")=====";
+  out_http_text += ControllerName + R"=====(</h2><h4 style="color: #8f8f8f;">firmware )=====" + FW_VERSION + R"=====(</h4></div><fieldset><legend><b>&nbsp;Counter values&nbsp;</b></legend><p><b>Counter for input #1</b><br><input id="in1" placeholder=" " value=")=====";
   tmpStr = String(curConfig.counter_01);
   out_http_text += tmpStr + R"=====(" name="in1"><div/> <button style="width:48%;" name="" onclick="gv(1)">Load current</button> <button class="button bgrn" style="width:48%;" name="" onclick="sv(1)">Set value</button><hr></p><p>
- <b>Counter for input 02</b><br><input id="in2" placeholder=" " value=")=====";
+ <b>Counter for input #2</b><br><input id="in2" placeholder=" " value=")=====";
   tmpStr = String(curConfig.counter_02);
   out_http_text += tmpStr + R"=====(" name="in2"><div/> <button style="width:48%;" name="" onclick="gv(2)">Load current</button> <button class="button bgrn" style="width:48%;" name="" onclick="sv(2)">Set value</button><hr></p><p>
  <b>Reboot counter</b><br><input id="in0" placeholder=" " value=")=====";
