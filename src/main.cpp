@@ -131,9 +131,9 @@ extern "C" {
 #define C_MAX_MQTT_FAILED_TRYS 100                // количество попыток соединения с MQTT сервером перед тем как начать поднимать AP точку
 
 // определяем топики для работы устройства по MQTT
-#define P_LWT_TOPIC    "diy/wtr_cntr/LWT"         // топик публикации доступности устройства
-#define P_SET_TOPIC    "diy/wtr_cntr/set"         // топик публикации команд для устройства
-#define P_STATE_TOPIC  "diy/wtr_cntr/state"       // топик публикации основных параметров состояния устройства
+#define P_LWT_TOPIC    "diy/wtr_cntr01/LWT"         // топик публикации доступности устройства
+#define P_SET_TOPIC    "diy/wtr_cntr01/set"         // топик публикации команд для устройства
+#define P_STATE_TOPIC  "diy/wtr_cntr01/state"       // топик публикации основных параметров состояния устройства
 
 
 // определяем константы для параметров и команд JSON формата в MQTT
